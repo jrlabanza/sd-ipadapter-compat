@@ -28,8 +28,8 @@ None. The extension is fully automatic and always-on. To disable, remove or rena
   prints `[ipadapter-compat] IPAdapter active - swapped ...->PyTorch` and `... restored` around each IPAdapter render
 - 2026-11-17 fix: the hooks are installed on the IPAdapter module Forge actually loaded (found in
   `modules.script_loading.loaded_scripts`); before, they went onto a second copy imported from `sys.path` and never ran
-- Known issue (Forge Neo, not this extension): `ip-adapter-plus_sdxl_vit-h` gives blown-out, saturated SDXL images
-  with any attention backend; the plain `ip-adapter_sdxl_vit-h` works
+- On SDXL fine-tunes (Illustrious, Pony, NoobAI) IPAdapter Plus acts about three times as strongly as on base SDXL:
+  weights around 0.2-0.3 (Plus) and 0.5 (Plus Face) look right; 0.7 blows out to a saturated, over-bright picture
 - Works alongside any existing IPAdapter / ControlNet workflow
 - No impact on non-IPAdapter generations — they continue to use whatever attention backend Forge started with
 
