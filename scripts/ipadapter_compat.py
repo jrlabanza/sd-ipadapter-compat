@@ -10,7 +10,7 @@ Three runtime fixes/features for IPAdapter on Forge Neo:
 
 2. Hook `IPAdapterPatcher.process_before_every_sampling` and
    `process_after_every_sampling` to temporarily swap `attention_function` from
-   SageAttention to PyTorch SDP while IPAdapter is active, then restore Sage
+   the fast attention (SageAttention, or Comfy-Kitchen INT8 on RTX 50) to PyTorch SDP while IPAdapter is active, then restore it
    afterward. (Stability Matrix `--disable-sage` is currently a safer fallback;
    this hook is best-effort.)
 
@@ -85,12 +85,15 @@ def _enter_ipadapter_mode():
         from backend import attention as attn_module
     except ImportError:
         return
-    sage_fn = getattr(attn_module, "attention_sage", None)
     pytorch_fn = getattr(attn_module, "attention_pytorch", None)
-    if sage_fn is None or pytorch_fn is None:
+    if pytorch_fn is None:
         return
-    if attn_module.attention_function is not sage_fn:
-        # Already on a safe backend (PyTorch/xformers/flash). Nothing to do.
+    # Whatever fast attention is active - SageAttention 2, or the Comfy-Kitchen INT8 attention Forge uses on RTX 50
+    # cards - is swapped out: with IPAdapter's extra cross-attention both overflow (Sage: NaN, black image;
+    # Comfy-Kitchen INT8: a blown-out, saturated image that is not NaN, so Forge's NaN check does not catch it).
+    sage_fn = attn_module.attention_function
+    if sage_fn is pytorch_fn:
+        # Already on PyTorch attention. Nothing to do.
         return
 
     sage_vae_fn = getattr(attn_module, "attention_function_vae", None)
@@ -128,8 +131,8 @@ def _enter_ipadapter_mode():
 
     _attention_state["saved_sites"] = saved
     _attention_state["active"] = True
-    logger.info(
-        f"{TAG} IPAdapter active - swapped Sage->PyTorch "
+    print(
+        f"{TAG} IPAdapter active - swapped {getattr(sage_fn, '__name__', 'fast attention')}->PyTorch "
         f"(main={len(saved['main'])} sites, vae={len(saved['vae'])} sites)"
     )
 
@@ -150,12 +153,23 @@ def _exit_ipadapter_mode():
             pass
     _attention_state["saved_sites"] = None
     _attention_state["active"] = False
-    logger.info(f"{TAG} IPAdapter inactive - restored Sage attention")
+    print(f"{TAG} IPAdapter inactive - restored the fast attention")
 
 
 def _resolve_ipadapter_module():
-    """Return the imported forge_ipadapter module (built-in extension)."""
+    """Return the imported forge_ipadapter module (built-in extension).
+
+    Forge loads extension scripts under its own module names (modules.script_loading.loaded_scripts), not as
+    `forge_ipadapter` in sys.modules - importing the file again made a second, unused copy, so the hooks were put on
+    a class Forge never calls. The copy Forge loaded is looked up first."""
     import importlib
+    try:
+        from modules import script_loading
+        for path, module in list(script_loading.loaded_scripts.items()):
+            if os.path.basename(path) == "forge_ipadapter.py" and hasattr(module, "IPAdapterPatcher"):
+                return module
+    except Exception:
+        pass
     try:
         return importlib.import_module("scripts.forge_ipadapter")
     except ImportError:
