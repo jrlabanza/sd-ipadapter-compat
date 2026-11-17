@@ -23,6 +23,10 @@ None. The extension is fully automatic and always-on. To disable, remove or rena
 ## Compatibility
 
 - Forge Neo (version `neo-2.22`+ tested)
+- The attention swap applies when Forge runs **SageAttention**. On RTX 50 (Blackwell) cards the
+  [Jrlabanza build](https://github.com/jrlabanza/jrlabanza-image-generator-core) starts Forge with Comfy-Kitchen INT8
+  attention instead (SageAttention 2 produced black images there); with that, this extension leaves attention alone
+  and the build's own safety net handles a NaN render by rendering it once more with PyTorch attention
 - Works alongside any existing IPAdapter / ControlNet workflow
 - No impact on non-IPAdapter generations — they continue to use whatever attention backend Forge started with
 
